@@ -2,7 +2,7 @@
 - name: GENERATE CA CERTS
   hosts: localhost
   gather_facts: no
-  become: no
+  become: yes
   vars:
     ca_org_name: fabio-org
     ca_dir: /var/lib/ca
@@ -11,7 +11,8 @@
   tasks:
     - name: clean up directory
       shell: |
-        rm -rf {{ ca_dir }}/*
+        sudo rm -rf {{ ca_dir }}/*
+        sudo mkdir -p {{ ca_dir }}
 
     - name: create ca.key
       shell: |

@@ -4,10 +4,9 @@
   gather_facts: yes
   become: yes
   vars:
-    cockroachdb_version: latest
+    cockroachdb_version: v23.2.17
     iknowwhatiamdoing: no
     cockroachdb_autofinalize: yes
-    cockroachdb_upgrade_delay: 120
     cockroachdb_advertise_addr: "{{ public_ip }}"
     cockroachdb_repo_url: https://binaries.cockroachdb.com
   tasks:
@@ -24,6 +23,13 @@
           --host={{ cockroachdb_advertise_addr }} \
           -e "SET CLUSTER SETTING cluster.preserve_downgrade_option = '{{ out.stdout[1:5] }}';"
       when: not cockroachdb_autofinalize
+
+    - name: Create the binary-type map
+      set_fact:
+        # map the machine CPU type to the matching filename component
+        bin_arch:
+          aarch64: arm64
+          x86_64: amd64
 
     - name: Check that the CockroachDB tarball exists locally
       stat:
@@ -60,6 +66,14 @@
         mv cockroach*/cockroach /usr/local/bin/cockroach
         rm -rf cockroach-*
 
+- name: RESTART COCKROACHDB
+  hosts: cockroachdb
+  gather_facts: no
+  serial: 1
+  become: yes
+  vars:
+    cockroachdb_upgrade_delay: 30
+  tasks:
     - name: execute lscpu to find numa nodes count
       shell: |
           lscpu | grep "NUMA node(s):" | cut -d":" -f2 | tr -d '[:space:]'
@@ -70,25 +84,22 @@
         ansible_numa_nodes: "{{ out.stdout }}"
 
     - name: Ensure cockroachdb service is restarted
-      systemd:
-        name: cockroachdb
-        state: restarted
-        enabled: yes
-        daemon_reload: yes
+      shell: |
+        systemctl daemon-reload
+        systemctl enable cockroachdb
+        systemctl restart cockroachdb
+
+        sleep {{ cockroachdb_upgrade_delay }}
       when: ansible_numa_nodes|int <= 1
 
     - name: Ensure cockroachdb services are restarted for NUMA nodes
       when: ansible_numa_nodes|int > 1
-      systemd:
-        name: cockroachdb-{{ numa_idx|string }}
-        state: restarted
-        enabled: yes
-        daemon_reload: yes
+      shell: |
+        systemctl daemon-reload
+        systemctl enable cockroachdb-{{ numa_idx|string }}
+        systemctl restart cockroachdb-{{ numa_idx|string }}
+
+        sleep {{ cockroachdb_upgrade_delay }}
       loop: "{{ range(ansible_numa_nodes|int) }}"
       loop_control:
         index_var: numa_idx
-
-    - name: Pause between node upgrades
-      pause:
-        seconds: "{{ cockroachdb_upgrade_delay }}"
-      when: cockroachdb_deployment_type == 'upgrade' and ansible_numa_nodes|int <= 1

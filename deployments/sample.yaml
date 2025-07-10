@@ -4,9 +4,9 @@ deployment_id: quantum
 # COCKROACHDB
 cockroachdb_version: latest
 cockroachdb_cluster_organization: Workshop
-cockroachdb_enterprise_license: crl-0-EO7clJsGGAIiCFdvcmtzaG9w
+cockroachdb_enterprise_license: crl-0-abc123
 
-
+# YOUR CLOUDS ENV DETAILS
 regions:
   defaults: &regions
     user: ubuntu
@@ -126,60 +126,16 @@ regions:
 
 
 deployment:
-  - cluster_name: demo
-    # group_name: krb5_server
-    # copies: 1
-    groups:
-      - <<: *gcp_us_central1_c
-        inventory_groups:
-          - krb5_server
-        exact_count: 0
-        instance:
-          cpu: 2
-          mem: 4
-        volumes:
-          os:
-            size: 10
-            type: standard_ssd
-          data: []
-        tags:
-          Name: "{{ deployment_id }}-kdc"
-
-  - cluster_name: demo
-    # group_name: krb5_client
-    # copies: 1
-    inventory_groups:
-      - app
-      - krb5_client
-    exact_count: 0
-    instance:
-      cpu: 2
-      mem: 4
-    volumes:
-      os:
-        size: 10
-        type: standard_ssd
-      data: []
-    tags:
-      Name: "{{ deployment_id }}-app"
-    groups:
-      - <<: *gcp_us_east4_a
-      - <<: *aws_us_west_2a
-      # - <<: *gcp_europe_west2_a
-      - <<: *azure_westeurope_default
-
-  - cluster_name: demo
-    # group_name: ha_proxy
-    # copies: 1
+  - cluster_name: quantum
     inventory_groups:
       - haproxy
     exact_count: 0
     instance:
-      cpu: 2
-      mem: 4
+      cpu: 4
+      mem: 16
     volumes:
       os:
-        size: 10
+        size: 30
         type: standard_ssd
       data: []
     tags:
@@ -187,41 +143,28 @@ deployment:
     groups:
       - <<: *gcp_us_east4_a
       - <<: *aws_us_west_2a
-      # - <<: *gcp_europe_west2_a
       - <<: *azure_westeurope_default
 
-  - cluster_name: demo
+  - cluster_name: quantum
     inventory_groups:
       - cockroachdb
     exact_count: 1
     instance:
-      cpu: 2
-      mem: 4
+      cpu: 4
+      mem: 16
     volumes:
       os:
-        size: 10
+        size: 30
         type: standard_ssd
       data: 
-        - size: 100
-          type: local_ssd
+        - size: 500
+          type: standard_ssd
+          iops: 8000
+          throughput: 480
           delete_on_termination: true
     tags:
       Name: "{{ deployment_id }}-cockroach"
     groups:
       - <<: *gcp_us_east4_a
-      - <<: *gcp_us_east4_b
-      - <<: *gcp_us_east4_c
       - <<: *aws_us_west_2a
-      - <<: *aws_us_west_2b
-      - <<: *aws_us_west_2c
-      # - <<: *gcp_europe_west2_a
-      # - <<: *gcp_europe_west2_b
-      # - <<: *gcp_europe_west2_c
       - <<: *azure_westeurope_default
-      - <<: *azure_westeurope_default
-      - <<: *azure_westeurope_default
-
-
-
-
-
