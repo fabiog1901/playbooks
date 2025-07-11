@@ -2,10 +2,18 @@
 
 A collection of Ansible Playbooks for deploying a CockroachDB Self Hosted cluster.
 
-## Generate CA key pair
+## Generate a self-signed CA key and cert pair
 
-You can use playbook `generate_ca_certs.yaml` to create the required custom CA crt and key.
-As writing at path `/var/lib/ca` requires privilege permisison, enter your MacOS password when prompted.
+CockroachDB cluster are created with TLS encryption for node to node communication,
+therefore, certificates are required for a secure deployment.
+
+The certificate we use are created using a self-signed CA.
+
+If you don't have a self-signed CA already, you can use playbook `generate_ca_certs.yaml`
+to create the required custom CA crt and key.
+
+The playbooks expect the CA files to be located at `/var/lib/ca`.
+As writing at path `/var/lib/ca` requires privilege permission, enter your MacOS password when prompted.
 
 ```bash
 $ ansible-playbook playbooks/generate_ca_certs.yaml --ask-become-pass
@@ -44,11 +52,9 @@ total 40
 -rw-r--r--  1 root  wheel     3B Jul 10 10:34 serial.txt
 ```
 
-You can now create your cluster.
-
 ## Setting up AWS, GCP, Azure credentials
 
-The `create_cluster.yaml` playbook uses [`cloud_instance`](https://github.com/fabiog1901/cloud_instance) to provision VMs on the public cloud.
+The `create_cluster.yaml` playbook uses [`cloud_instance`](https://github.com/fabiog1901/cloud_instance) to provision VMs on the public cloud providers.
 
 Install it
 
