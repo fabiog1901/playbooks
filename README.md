@@ -1,6 +1,6 @@
-# CockroachDB Collection
+# CockroachDB playbooks
 
-The Collection groups together Ansible Playbooks for deploying a CockroachDB Self Hosted cluster.
+A collection of Ansible Playbooks for deploying a CockroachDB Self Hosted cluster.
 
 ## Generate CA key pair
 
