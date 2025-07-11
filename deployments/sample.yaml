@@ -124,7 +124,7 @@ regions:
         zone: c
         subnet: subnet-c
 
-
+# Used by cloud_instance
 deployment:
   - cluster_name: quantum
     inventory_groups:
