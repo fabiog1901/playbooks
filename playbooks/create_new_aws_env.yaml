@@ -1,0 +1,112 @@
+---
+- name: CREATE AWS RESOURCES
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: no
+  vars:
+    deployment_id: workshop
+    region: ca-central-1
+  tasks:
+    - name: ensure presence of vpc_id
+      ec2_vpc_net:
+        name: "{{ deployment_id }}"
+        state: present
+        cidr_block: 10.0.0.0/16
+        region: "{{ region }}"
+        tags:
+          deployment_id: "{{ deployment_id }}"
+      register: _vpc
+
+    - name: get rtb info
+      ec2_vpc_route_table_info:
+        region: "{{ region }}"
+        filters:
+          vpc-id: "{{ _vpc.vpc.id }}"
+      register: _rtb
+
+    - name: get region AZs
+      aws_az_info:
+        region: "{{ region }}"
+      register: _region_info
+
+    - name: ensure presence of 4 public and 4 private subnets in different AZs
+      ec2_vpc_subnet:
+        state: present
+        region: "{{ region }}"
+        vpc_id: "{{ _vpc.vpc.id }}"
+        cidr: "{{ item.cidr }}"
+        map_public: yes
+        az: "{{ _region_info.availability_zones[item.az_idx].zone_name | default(_region_info.availability_zones[0].zone_name) }}"
+        tags:
+          Name: "{{ item.name }}-{{ _region_info.availability_zones[item.az_idx].zone_name[-1:] | default(_region_info.availability_zones[0].zone_name[-1:]) }}"
+          deployment_id: "{{ deployment_id }}"
+      register: _subnets
+      loop:
+        - name: public
+          cidr: 10.0.0.0/19
+          az_idx: 0
+        - name: public
+          cidr: 10.0.32.0/19
+          az_idx: 1
+        - name: public
+          cidr: 10.0.64.0/19
+          az_idx: 2
+        - name: private
+          cidr: 10.0.128.0/19
+          az_idx: 0
+        - name: private
+          cidr: 10.0.160.0/19
+          az_idx: 1
+        - name: private
+          cidr: 10.0.192.0/19
+          az_idx: 2
+
+    - name: ensure presence of igw
+      ec2_vpc_igw:
+        vpc_id: "{{ _vpc.vpc.id }}"
+        state: present
+        region: "{{ region }}"
+        tags:
+          deployment_id: "{{ deployment_id }}"
+      register: _igw
+
+    # TODO: seems like there's a bug in this module:
+    # despite mentioning the routetableid to update with the
+    # routes and subnets, a new rtb is created.
+    # doesn't matter, but still...
+    - name: configure rtb
+      ec2_vpc_route_table:
+        vpc_id: "{{ _vpc.vpc.id }}"
+        region: "{{ region }}"
+        state: present
+        route_table_id: "{{ _rtb.route_tables[0].id }}"
+        tags:
+          deployment_id: "{{ deployment_id }}"
+        subnets:
+          - "{{ _subnets.results[0].subnet.id }}"
+          - "{{ _subnets.results[1].subnet.id }}"
+          - "{{ _subnets.results[2].subnet.id }}"
+          - "{{ _subnets.results[3].subnet.id }}"
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ _igw.gateway_id }}"
+
+    - name: ensure presence of SG default
+      ec2_group:
+        name: "{{ deployment_id }}"
+        description: "{{ deployment_id }}"
+        state: present
+        vpc_id: "{{ _vpc.vpc.id }}"
+        region: "{{ region }}"
+        tags:
+          deployment_id: "{{ deployment_id }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+              - 26257
+              - 26357
+              - 8080
+            cidr_ip:
+              - 0.0.0.0/0
