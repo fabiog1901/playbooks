@@ -77,8 +77,10 @@ GCP_PROJECT=cea-team
 Validate that authentication is working by issuing a command to fetch instances for a fake `deployment_id`
 
 ```bash
-$ cloud_instance fake_deployment_id present '{}' '[]'
+$ cloud_instance gather fake_deployment_id
 []
+
+# cloud_instance logs to /tmp/cloud_instance.log.
 ```
 
 As it returns an empty list `[]` without throwing any error, we know Authentication is correctly setup.

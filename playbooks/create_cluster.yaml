@@ -7,101 +7,95 @@
   connection: local
   gather_facts: no
   become: no
-  vars:
-    deployment_id: "fabio-{{ 1000 | random(start=100) }}"
-    deployment: {}
   tags:
     - infra
     - cloud_instance
   tasks:
     - name: Ensure presence of instances
       shell: |
-        cloud_instance {{ deployment_id }} present '{{ deployment | to_json }}' '{{ defaults | to_json }}'
+        cloud_instance create \
+          -d {{ deployment_id }} \
+          --deployment '{{ deployment | to_json }}' \
+          --defaults '{{ defaults | to_json }}'
       vars:
         defaults:
-          instances:
-            aws:
-              "2":
-                default: m6i.large
-                "4": c5.large
-                "8": m6i.large
-                "16": r5.large
-              "4":
-                default: m6i.xlarge
-                "8": c5.xlarge
-                "16": m6i.xlarge
-                "32": r5.xlarge
-              "8":
-                default: m6i.2xlarge
-                "16": c5.2xlarge
-                "32": m6i.2xlarge
-                "64": r5.2xlarge
-              "16":
-                default: m6i.4xlarge
-                "32": c5.4xlarge
-                "64": m6i.4xlarge
-                "128": r5.4xlarge
-              "32":
-                default: m6i.8xlarge
-                "128": m6i.8xlarge
-                "256": r5.8xlarge
-            azure:
-              "2":
-                "4": Standard_F2s_v2
-                "8": Standard_D2s_v3
-                "16": Standard_E2s_v3
-                default: Standard_D2s_v3
-              "4":
-                "8": Standard_F4s_v2
-                "16": Standard_D4s_v3
-                "32": Standard_E4s_v3
-                default: Standard_D4s_v3
-              "8":
-                "16": Standard_F8s_v2
-                "32": Standard_D8s_v3
-                "64": Standard_E8s_v3
-                default: Standard_D8s_v3
-              "16":
-                "32": Standard_F16s_v2
-                "64": Standard_D16s_v3
-                "128": Standard_E16s_v3
-                default: Standard_D16s_v3
-              "32":
-                "64": Standard_F32s_v2
-                "128": Standard_D32s_v3
-                "256": Standard_E32s_v3
-                default: Standard_D32s_v3
-            gcp:
-              "2":
-                default: n2-standard-2
-                "2": n2-highcpu-2
-                "4": n2-standard-2
-                "8": n2-standard-2
-                "16": n2-highmem-2
-              "4":
-                default: n2-standard-4
-                "4": n2-highcpu-4
-                "8": n2-standard-4
-                "16": n2-standard-4
-                "32": n2-highmem-4
-              "8":
-                default: n2-standard-8
-                "8": n2-highcpu-8
-                "16": n2-standard-8
-                "32": n2-standard-8
-                "64": n2-highmem-8
-              "16":
-                default: n2-standard-16
-                "16": n2-highcpu-16
-                "32": n2-standard-16
-                "64": n2-standard-16
-                "128": n2-highmem-16
-              "32":
-                default: n2-standard-32
-                "32": n2-highcpu-32
-                "64": n2-standard-32
-                "128": n2-standard-32
-                "256": n2-highmem-32
+          aws:
+            "2":
+              default: t3.large # m6i.large
+              "4": c5.large
+              "8": m6i.large
+              "16": r5.large
+            "4":
+              default: t3.xlarge #m6i.xlarge
+              "8": c5.xlarge
+              "16": m6i.xlarge
+              "32": r5.xlarge
+            "8":
+              default: m6i.2xlarge
+              "16": c5.2xlarge
+              "32": m6i.2xlarge
+              "64": r5.2xlarge
+            "16":
+              default: m6i.4xlarge
+              "32": c5.4xlarge
+              "64": m6i.4xlarge
+              "128": r5.4xlarge
+            "32":
+              default: m6i.8xlarge
+              "128": m6i.8xlarge
+              "256": r5.8xlarge
+          azure:
+            "2":
+              "4": Standard_F2s_v2
+              "8": Standard_D2s_v3
+              "16": Standard_E2s_v3
+              default: Standard_D2s_v3
+            "4":
+              "8": Standard_F4s_v2
+              "16": Standard_D4s_v3
+              "32": Standard_E4s_v3
+              default: Standard_D4s_v3
+            "8":
+              "16": Standard_F8s_v2
+              "32": Standard_D8s_v3
+              "64": Standard_E8s_v3
+              default: Standard_D8s_v3
+            "16":
+              "32": Standard_F16s_v2
+              "64": Standard_D16s_v3
+              "128": Standard_E16s_v3
+              default: Standard_D16s_v3
+            "32":
+              "64": Standard_F32s_v2
+              "128": Standard_D32s_v3
+              "256": Standard_E32s_v3
+              default: Standard_D32s_v3
+          gcp:
+            "2":
+              default: e2-medium #n2-standard-2
+              "4": n2-standard-2
+              "8": n2-standard-2
+              "16": n2-highmem-2
+            "4":
+              default: e2-medium #n2-standard-4
+              "8": n2-standard-4
+              "16": n2-standard-4
+              "32": n2-highmem-4
+            "8":
+              default: e2-large #n2-standard-8
+              "16": n2-standard-8
+              "32": n2-standard-8
+              "64": n2-highmem-8
+            "16":
+              default: n2-standard-16
+              "32": n2-standard-16
+              "64": n2-standard-16
+              "128": n2-highmem-16
+            "32":
+              default: n2-standard-32
+              "64": n2-standard-32
+              "128": n2-standard-32
+              "256": n2-highmem-32
       register: instances
 
     - name: Wait for SSH to come up
@@ -139,34 +133,6 @@
         extra_vars: "{{ item.extra_vars }}"
       loop: "{{ instances.stdout | from_json }}"
 
-    - name: save cluster list of hosts
-      copy:
-        content: |
-          {% for item in groups %}
-          {% if item not in ['all', 'ungrouped'] %}
-          [{{item}}]
-          {% for entry in groups[item] %}
-          {{ entry }} ansible_host={{ hostvars[entry].ansible_host }} cloud={{ hostvars[entry].cloud }} cluster_name={{ hostvars[entry].cluster_name }}  group_name={{ hostvars[entry].group_name }} id={{ hostvars[entry].id }} region={{ hostvars[entry].region }} zone={{ hostvars[entry].zone }} private_hostname={{ hostvars[entry].private_hostname }} private_ip={{ hostvars[entry].private_ip }} public_hostname={{ hostvars[entry].public_hostname }} public_ip={{ hostvars[entry].public_ip }} ansible_user={{ hostvars[entry].ansible_user }} extra_vars="{{ hostvars[entry].extra_vars }}" 
-          {% endfor %} 
-
-          {% endif %}
-          {% endfor %}
-        dest: "../inventories/{{ deployment_id }}.ini"
-
-    - name: save simplified list of hosts
-      copy:
-        content: |
-          {% for item in groups %}
-          {% if item in ['haproxy', 'cockroachdb'] %}
-          [{{item}}]
-          {% for entry in groups[item] %}
-          {{ hostvars[entry].cloud }}   {{ "{:18}".format(hostvars[entry].region) }} {{ hostvars[entry].public_ip }}
-          {% endfor %}
-
-          {% endif %}
-          {% endfor %}
-        dest: "../inventories/{{ deployment_id }}.simple.ini"
-
 ##############
 #  PLATFORM  #
 ##############
@@ -175,23 +141,19 @@
   gather_facts: yes
   become: no
   vars:
-    ca_org_name: fabio-org
-    ca_dir: /var/lib/ca
+    certificates_organization_name: fabio-org
     certificates_dir: certs
     certificates_usernames:
       - root
     certificates_hosts: "{{ groups['cockroachdb'] }}"
-    certificates_loadbalancer: "{{ groups['haproxy'] | default([]) }}"
+    certificates_loadbalancer: "{{ groups['haproxy'] | default('') }}"
   tags:
     - platform
     - certificates
   tasks:
+
     - name: Recreate certificate directory
       shell: |
-        rm {{ ca_dir }}/index.txt
-        touch {{ ca_dir }}/index.txt
-        echo '01' > {{ ca_dir }}/serial.txt
-
         rm -rf "{{ certificates_dir }}"
         mkdir "{{ certificates_dir }}"
         chmod 0755 "{{ certificates_dir }}"
@@ -207,7 +169,7 @@
           req_extensions = extensions
 
           [ distinguished_name ]
-          organizationName = {{ ca_org_name }}
+          organizationName = {{ certificates_organization_name }}
 
           [ extensions ]
           subjectAltName = critical, @san
@@ -245,17 +207,17 @@
         openssl req \
           -new \
           -config {{ certificates_dir }}/node.{{ item }}.cnf \
-          -key    {{ certificates_dir }}/node.{{ item }}.key \
-          -out    {{ certificates_dir }}/node.{{ item }}.csr \
+          -key {{ certificates_dir }}/node.{{ item }}.key \
+          -out {{ certificates_dir }}/node.{{ item }}.csr \
           -batch
       loop: "{{ certificates_hosts }}"
       
     - name: Sign node csr with CA key and crt
       shell: |
         openssl ca \
-          -config  {{ ca_dir }}/ca.cnf \
-          -keyfile {{ ca_dir }}/ca.key \
-          -cert    {{ ca_dir }}/ca.crt \
+          -config  /var/lib/ca/ca.cnf \
+          -keyfile /var/lib/ca/ca.key \
+          -cert    /var/lib/ca/ca.crt \
           -policy signing_policy \
           -extensions signing_node_req \
           -out {{ certificates_dir }}/node.{{ item }}.crt \
@@ -274,7 +236,7 @@
           req_extensions = extensions
 
           [ distinguished_name ]
-          organizationName = {{ ca_org_name }}
+          organizationName = {{ certificates_organization_name }}
           commonName = {{ item }}
 
           [ extensions ]
@@ -295,17 +257,17 @@
         openssl req \
           -new \
           -config {{ certificates_dir }}/client.{{ item }}.cnf \
-          -key    {{ certificates_dir }}/client.{{ item }}.key \
-          -out    {{ certificates_dir }}/client.{{ item }}.csr \
+          -key {{ certificates_dir }}/client.{{ item }}.key \
+          -out {{ certificates_dir }}/client.{{ item }}.csr \
           -batch
       loop: "{{ certificates_usernames }}"
           
     - name: Sign client csr with CA crt and key
       shell: |
         openssl ca \
-          -config  {{ ca_dir }}/ca.cnf \
-          -keyfile {{ ca_dir }}/ca.key \
-          -cert    {{ ca_dir }}/ca.crt \
+          -config  /var/lib/ca/ca.cnf \
+          -keyfile /var/lib/ca/ca.key \
+          -cert    /var/lib/ca/ca.crt \
           -policy signing_policy \
           -extensions signing_client_req \
           -out {{ certificates_dir }}/client.{{ item }}.crt \
@@ -314,6 +276,7 @@
           -batch
       loop: "{{ certificates_usernames }}"
 
+  
 
 - name: CONFIGURE OS
   hosts: cockroachdb
@@ -402,30 +365,6 @@
       shell: |
         blkid {{ item }} -t TYPE="ext4" || mkfs.ext4 {{ item }}
       loop: "{{ _disks.stdout_lines }}"
-      
-    - name: execute lscpu to find numa nodes count
-      shell: |
-          lscpu | grep "NUMA node(s):" | cut -d":" -f2 | tr -d '[:space:]'
-      register: out
-    
-    - name: Set fact ansible_numa_nodes
-      set_fact:
-        ansible_numa_nodes: "{{ out.stdout }}"
-  
-    - name: install numactl if instance has NUMA nodes
-      when: ansible_numa_nodes|int > 1
-      block:
-        - name: install numactl on debian
-          when: ansible_facts.os_family | lower == 'debian'
-          shell: |
-            apt update
-            apt install -y numactl
-            
-        - name: install numactl on redhat
-          when: ansible_facts.os_family | lower == 'redhat'
-          shell: |
-            dnf update -y
-            dnf install -y numactl
 
 
 - name: DEPLOY COCKROACHDB
@@ -433,32 +372,31 @@
   gather_facts: yes
   become: yes
   vars:
-    ca_dir: /var/lib/ca
-    cockroachdb_version: v25.2.1
+    # cockroachdb_version: latest
     cockroachdb_secure: yes
     cockroachdb_certificates_dir: certs
     cockroachdb_certificates_clients:
       - root
     cockroachdb_sql_port: 26257
-    cockroachdb_rpc_port: 26357
     cockroachdb_http_addr_ip: "0.0.0.0"
     cockroachdb_http_addr_port: 8080
     # cockroachdb_store:
     #   - /mnt/cockroach
-    cockroachdb_secure_flag: --certs-dir=/var/lib/cockroach/certs
-    cockroachdb_insecure_flag: --insecure
-    cockroachdb_repo_url: https://binaries.cockroachdb.com
     cockroachdb_join: 
       - "{{ hostvars[( groups[cluster_name] | intersect(groups['cockroachdb']) )[0]].public_ip }}"
       - "{{ hostvars[( groups[cluster_name] | intersect(groups['cockroachdb']) )[1]].public_ip }}"
       - "{{ hostvars[( groups[cluster_name] | intersect(groups['cockroachdb']) )[2]].public_ip }}"
-    cockroachdb_locality: "cloud={{ cloud }},region={{ region }},zone={{ zone }}"
-    cockroachdb_advertise_addr: "{{ public_ip }}"
+    cockroachdb_secure_flag: --certs-dir=/var/lib/cockroach/certs
+    cockroachdb_insecure_flag: --insecure
+    cockroachdb_repo_url: https://binaries.cockroachdb.com
+    cockroachdb_locality: "cloud={{ cloud | default('') }},region={{ region | default('') }},zone={{ zone | default('') }}"
+    cockroachdb_advertise_addr: "{{ public_ip | default('') }}"
     cockroachdb_listen_addr: "0.0.0.0"
     cockroachdb_attrs: std
     cockroachdb_cache: ".35"
     cockroachdb_max_sql_memory: ".35"
     cockroachdb_env_vars: []
+    cockroachdb_rpc_port: 26357
     cockroachdb_max_offset: 250ms
   tags:
     - platform
@@ -479,7 +417,7 @@
     - name: Download CockroachDB binary
       shell: |
         wget -q {{ cockroachdb_repo_url }}/cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
-      when: cockroachdb_version != "master" and cockroachdb_version != "custom" and not _stat_result.stat.exists
+      when: not _stat_result.stat.exists
     
     - name: Install CockroachDB binary
       shell: |
@@ -489,22 +427,6 @@
         mkdir /usr/local/lib/cockroach/
         mv cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}/lib/libgeos*.so /usr/local/lib/cockroach/
         rm -rf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}
-    
-    - name: install MASTER binary
-      when: cockroachdb_version == "master"
-      shell: |
-        wget https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-{{ bin_arch[ansible_architecture] }}.LATEST
-        chmod +x cockroach.linux-gnu-{{ bin_arch[ansible_architecture] }}.LATEST
-        mv cockroach.linux-gnu-{{ bin_arch[ansible_architecture] }}.LATEST /usr/local/bin/cockroach
-        rm -rf cockroach-*
-
-    - name: install custom binary
-      when: cockroachdb_version == "custom"
-      shell: |
-        wget {{ cockroachdb_custom_url }}
-        tar xvf *gz 
-        mv cockroach*/cockroach /usr/local/bin/cockroach
-        rm -rf cockroach-*
 
     - name: Add the user cockroach
       shell: |
@@ -529,7 +451,7 @@
     - name: Copy CA certificate
       when: cockroachdb_secure
       copy:
-        src: "{{ ca_dir }}/ca.crt"
+        src: /var/lib/ca/ca.crt
         dest: /var/lib/cockroach/certs/ca.crt
 
     - name: Copy node certificate
@@ -587,7 +509,10 @@
     - name: Mount the disks
       when: _disks.stdout_lines | length > 0
       shell: |
-        mountpoint /mnt/cockroach{{ idx }} || mount {{ item }} /mnt/cockroach{{ idx }}
+        DISKUUID=`lsblk -no UUID {{ item }}`
+        grep -q $DISKUUID /etc/fstab || echo "UUID=$DISKUUID /mnt/cockroach{{ idx }} ext4 defaults 0 2" >> /etc/fstab
+        systemctl daemon-reload
+        mount -a
       loop: "{{ _disks.stdout_lines }}"
       loop_control:
         index_var: idx
@@ -614,8 +539,11 @@
       loop_control:
         index_var: idx
 
+    - name: Group hosts dynamically based on region
+      group_by:
+        key: "crdbregion_{{ region }}"
+
     - name: Copy systemd template cockroachdb.service
-      when: ansible_numa_nodes|int <= 1
       copy:
         content: |
           [Unit]
@@ -638,16 +566,20 @@
               --cache={{ cockroachdb_cache }} \
               --max-sql-memory={{ cockroachdb_max_sql_memory }} \
               --http-addr={{ cockroachdb_http_addr_ip }}:{{ cockroachdb_http_addr_port }} \
-              {% for join in cockroachdb_join %}
-              --join={{ join }}:{{ cockroachdb_rpc_port }} \
+              {% for g in groups %}
+              {% if g.startswith("crdbregion_") %}
+              {% for joinhost in groups[g][:3] %}
+              --join={{ hostvars[joinhost].public_ip }}:{{ cockroachdb_rpc_port }} \
+              {% endfor%}
+              {% endif %}
               {% endfor %}
               --locality={{ cockroachdb_locality }} \
               --attrs={{ cockroachdb_attrs }} \
               --max-offset={{ cockroachdb_max_offset }}
           TimeoutStopSec=300
           LimitNOFILE=65000
-          Restart=always
-          RestartPreventExitStatus=SIGKILL
+          Restart=on-failure
+          SuccessExitStatus=SIGKILL
           RestartSec=10
           StandardOutput=syslog
           StandardError=syslog
@@ -662,72 +594,11 @@
         backup: yes
         force: yes
 
-    - name: create individual systemd unit files for each NUMA node
-      when: ansible_numa_nodes|int > 1
-      copy:
-        content: |
-          [Unit]
-          Description=Cockroach Database cluster node
-          Requires=network.target
-          [Service]
-          Type=notify
-          WorkingDirectory=/var/lib/cockroach
-          {% for v in cockroachdb_env_vars %}
-          Environment="{{ v }}"
-          {% endfor %}
-          ExecStart=/usr/bin/numactl --cpunodebind={{ numa_idx }} --membind={{ numa_idx }} -- \
-              /usr/local/bin/cockroach start \
-              {{ (cockroachdb_secure) | ternary(cockroachdb_secure_flag, cockroachdb_insecure_flag) }} \
-              --store={{ '/mnt/cockroach' + numa_idx|string }} \
-              --listen-addr={{ cockroachdb_listen_addr }}:{{ cockroachdb_rpc_port|int + numa_idx|int }} \
-              --advertise-addr={{ cockroachdb_advertise_addr }}:{{ cockroachdb_rpc_port|int + numa_idx|int }} \
-              --sql-addr=:{{ cockroachdb_sql_port|int + numa_idx|int }} \
-              --cache={{ cockroachdb_cache }} \
-              --max-sql-memory={{ cockroachdb_max_sql_memory }} \
-              --http-addr={{ cockroachdb_http_addr_ip }}:{{ cockroachdb_http_addr_port|int + numa_idx|int }} \
-              {% for join in cockroachdb_join %}
-              --join={{ join }}:{{ cockroachdb_rpc_port }} \
-              {% endfor %}
-              --locality={{ cockroachdb_locality }} \
-              --attrs={{ cockroachdb_attrs }} \
-              --max-offset={{ cockroachdb_max_offset }}
-          TimeoutStopSec=300
-          LimitNOFILE=65000
-          Restart=always
-          RestartPreventExitStatus=SIGKILL
-          RestartSec=10
-          StandardOutput=syslog
-          StandardError=syslog
-          SyslogIdentifier={{ 'cockroach-' + numa_idx|string }}
-          User=cockroach
-          [Install]
-          WantedBy=default.target
-          dest: /etc/systemd/system/cockroachdb-{{ numa_idx|string }}.service
-          mode: 0644
-        owner: root
-        group: root
-        backup: yes
-        force: yes
-      loop: "{{ range(ansible_numa_nodes|int) }}"
-      loop_control:
-        index_var: numa_idx
-
     - name: Ensure cockroachdb service is restarted
       shell: |
         systemctl daemon-reload
         systemctl enable cockroachdb
         systemctl restart cockroachdb
-      when: ansible_numa_nodes|int <= 1
-
-    - name: Ensure cockroachdb services are restarted for NUMA nodes
-      when: ansible_numa_nodes|int > 1
-      shell: |
-        systemctl daemon-reload
-        systemctl enable cockroachdb-{{ numa_idx|string }}
-        systemctl restart cockroachdb-{{ numa_idx|string }}
-      loop: "{{ range(ansible_numa_nodes|int) }}"
-      loop_control:
-        index_var: numa_idx
 
     - name: Init Cluster
       run_once: yes
@@ -749,7 +620,7 @@
     haproxy_checkport: '8080'
     haproxy_serverprefix: cockroach
     # CRDB
-    cockroachdb_version: latest
+    # cockroachdb_version: latest
     cockroachdb_repo_url: https://binaries.cockroachdb.com
   tags:
     - platform
@@ -788,11 +659,8 @@
               option httpchk GET /health?ready=1
 
           {% for host in haproxy_group %}
-          {% set outer_loop = loop %}
           {% if hostvars[host].extra_vars.crdb_region | default(hostvars[host].region) == extra_vars.crdb_region | default(region) %}
-          {% for idx in range(hostvars[host].ansible_numa_nodes|int) %}
-              server {{ haproxy_serverprefix }}{{ outer_loop.index * 100 + idx }} {{ hostvars[host].private_hostname }}:{{ haproxy_port|int + idx }} check port {{ haproxy_checkport|int + idx }}
-          {% endfor %}
+              server {{ haproxy_serverprefix }}-{{ loop.index }} {{ hostvars[host].private_hostname }}:{{ haproxy_port }} check port {{ haproxy_checkport }}
           {% endif %}
           {% endfor %}
 
@@ -803,11 +671,8 @@
               option httpchk GET /health?ready=1
 
           {% for host in haproxy_group %}
-          {% set outer_loop = loop %}
           {% if hostvars[host].extra_vars.crdb_region | default(hostvars[host].region) == extra_vars.crdb_region | default(region) %}
-          {% for idx in range(hostvars[host].ansible_numa_nodes|int) %}
-              server {{ haproxy_serverprefix }}{{ outer_loop.index * 100 + idx }} {{ hostvars[host].private_hostname }}:{{ haproxy_checkport|int + idx }} check port {{ haproxy_checkport|int + idx }}
-          {% endfor %}
+              server {{ haproxy_serverprefix }}-{{ loop.index }} {{ hostvars[host].private_hostname }}:{{ haproxy_checkport }} check port {{ haproxy_checkport }}
           {% endif %}
           {% endfor %}
         dest: /etc/haproxy/haproxy.cfg
@@ -831,12 +696,12 @@
     - name: Check that the CockroachDB tarball exists locally
       stat:
         path: cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
-      register: out
+      register: _stat_result
 
     - name: Download CockroachDB binary
       shell: |
         wget -q {{ cockroachdb_repo_url }}/cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
-      when: not out.stat.exists
+      when: not _stat_result.stat.exists
     
     - name: Install CockroachDB binary
       shell: |
@@ -851,14 +716,7 @@
   gather_facts: no
   become: yes
   vars:
-    cockroachdb_advertise_addr: "{{ public_ip }}"
-    cockroachdb_cluster_organization: MyOrg
-    cockroachdb_enterprise_license: crl-0-zzzyyyzzz
-    dbusers:
-      - name: cockroach
-        password: cockroach
-        is_cert: no
-        is_admin: yes
+    cockroachdb_advertise_addr: "{{ public_ip | default('') }}"
   tags:
     - app
   tasks:
@@ -898,11 +756,60 @@
           -e "GRANT admin TO {{ item.name }};"
       loop: "{{ dbusers }}"
       when: item.is_admin
-
-    - name: List nodes
+    
+    - name: CockroachDB - Create External Connection for backups
       run_once: yes
+      shell: |
+        cockroach sql \
+          --host={{ cockroachdb_advertise_addr }} \
+          --certs-dir=/var/lib/cockroach/certs \
+          -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS backup AS '{{ cloud_storage_url | replace('DEPLOYMENT_ID', deployment_id) }}';"
+
+    - name: CockroachDB - Setup Full Cluster Backup Schedule
+      run_once: yes
+      shell: |
+        cockroach sql \
+          --host={{ cockroachdb_advertise_addr }} \
+          --certs-dir=/var/lib/cockroach/certs \
+          -e "CREATE SCHEDULE IF NOT EXISTS main_backup 
+              FOR BACKUP INTO 'external://backup' 
+              WITH revision_history, incremental_location = 'external://backup' 
+              RECURRING '@hourly' 
+              FULL BACKUP '@daily' 
+              WITH SCHEDULE OPTIONS 
+                  on_previous_running = 'skip', 
+                  on_execution_failure = 'reschedule', 
+                  first_run = 'now';"
+    
+- name: GET DATA FROM COCKROACHDB CLUSTER
+  hosts: localhost
+  gather_facts: no
+  become: no
+  tasks:
+    - name: Collect cloud, region and public_ip for cockroachdb servers
+      set_fact:
+        cockroachdb: >-
+          {{
+            groups['cockroachdb']
+            | map('extract', hostvars) 
+            | map('dict2items')                  
+            | map('selectattr', 'key', 'in', ['ansible_host', 'cloud', 'region', 'public_ip'])
+            | map('items2dict')    | list              
+          }}
+
+    - name: Collect cloud, region and public_ip for haproxy servers
+      set_fact:
+        haproxy: >-
+          {{
+            groups['haproxy']
+            | map('extract', hostvars) 
+            | map('dict2items')                  
+            | map('selectattr', 'key', 'in', ['ansible_host', 'cloud', 'region', 'public_ip'])
+            | map('items2dict')    | list              
+          }}
+
+    - name: Data
       debug:
-        msg: 
-          haproxy: "{{ groups['haproxy'] | default([]) }}"
-          cockroachdb: "{{ groups['cockroachdb'] }}"
-  
+        msg:
+          cockroachdb: "{{ cockroachdb }}"
+          haproxy: "{{ haproxy }}"
