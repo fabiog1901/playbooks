@@ -18,9 +18,9 @@
       shell: |
         openssl genrsa \
           -out {{ ca_dir }}/ca.key 2048
-        
+
         chmod 400 {{ ca_dir }}/ca.key
-        
+
     - name: Create ca.cnf
       copy:
         content: |
@@ -81,4 +81,3 @@
       shell: |
         echo > {{ ca_dir }}/index.txt
         echo '01' > {{ ca_dir }}/serial.txt
-

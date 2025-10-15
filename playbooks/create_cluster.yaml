@@ -82,7 +82,7 @@
               "16": n2-standard-4
               "32": n2-highmem-4
             "8":
-              default: e2-large #n2-standard-8
+              default: n2-standard-8
               "16": n2-standard-8
               "32": n2-standard-8
               "64": n2-highmem-8
@@ -133,6 +133,34 @@
         extra_vars: "{{ item.extra_vars }}"
       loop: "{{ instances.stdout | from_json }}"
 
+    - name: save cluster list of hosts
+      copy:
+        content: |
+          {% for item in groups %}
+          {% if item not in ['all', 'ungrouped'] %}
+          [{{item}}]
+          {% for entry in groups[item] %}
+          {{ entry }} ansible_host={{ hostvars[entry].ansible_host }} cloud={{ hostvars[entry].cloud }} cluster_name={{ hostvars[entry].cluster_name }}  group_name={{ hostvars[entry].group_name }} id={{ hostvars[entry].id }} region={{ hostvars[entry].region }} zone={{ hostvars[entry].zone }} private_hostname={{ hostvars[entry].private_hostname }} private_ip={{ hostvars[entry].private_ip }} public_hostname={{ hostvars[entry].public_hostname }} public_ip={{ hostvars[entry].public_ip }} ansible_user={{ hostvars[entry].ansible_user }} extra_vars="{{ hostvars[entry].extra_vars }}" 
+          {% endfor %} 
+
+          {% endif %}
+          {% endfor %}
+        dest: "../inventories/{{ deployment_id }}.ini"
+
+    - name: save simplified list of hosts
+      copy:
+        content: |
+          {% for item in groups %}
+          {% if item in ['haproxy', 'cockroachdb'] %}
+          [{{item}}]
+          {% for entry in groups[item] %}
+          {{ hostvars[entry].cloud }}   {{ "{:18}".format(hostvars[entry].region) }} {{ hostvars[entry].public_ip }}
+          {% endfor %}
+
+          {% endif %}
+          {% endfor %}
+        dest: "../inventories/{{ deployment_id }}.simple.ini"
+
 ##############
 #  PLATFORM  #
 ##############
@@ -151,7 +179,6 @@
     - platform
     - certificates
   tasks:
-
     - name: Recreate certificate directory
       shell: |
         rm -rf "{{ certificates_dir }}"
@@ -211,7 +238,7 @@
           -out {{ certificates_dir }}/node.{{ item }}.csr \
           -batch
       loop: "{{ certificates_hosts }}"
-      
+
     - name: Sign node csr with CA key and crt
       shell: |
         openssl ca \
@@ -261,7 +288,7 @@
           -out {{ certificates_dir }}/client.{{ item }}.csr \
           -batch
       loop: "{{ certificates_usernames }}"
-          
+
     - name: Sign client csr with CA crt and key
       shell: |
         openssl ca \
@@ -275,8 +302,6 @@
           -in {{ certificates_dir }}/client.{{ item }}.csr \
           -batch
       loop: "{{ certificates_usernames }}"
-
-  
 
 - name: CONFIGURE OS
   hosts: cockroachdb
@@ -316,7 +341,7 @@
           server time2.google.com iburst
           server time3.google.com iburst
           server time4.google.com iburst
-    
+
     - name: Azure only - disable refclock
       when: cloud == 'azure'
       shell: |
@@ -325,8 +350,7 @@
         echo $DEVICE_ID | sudo tee /sys/bus/vmbus/drivers/hv_utils/unbind
 
     - name: add only the NTP servers to the chrony.conf file
-      shell:
-        sed -i '/^pool.*/d' {{ ntp_conf }}
+      shell: sed -i '/^pool.*/d' {{ ntp_conf }}
         sed -i '/^server.*/d' {{ ntp_conf }}
         sed -i '/^refclock.*/d' {{ ntp_conf }}
 
@@ -334,7 +358,7 @@
 
     - name: restart chrony
       shell: |
-        systemctl restart {{ ntp_deamon }} 
+        systemctl restart {{ ntp_deamon }}
 
     - name: Update VM swappiness
       shell: |
@@ -366,7 +390,6 @@
         blkid {{ item }} -t TYPE="ext4" || mkfs.ext4 {{ item }}
       loop: "{{ _disks.stdout_lines }}"
 
-
 - name: DEPLOY COCKROACHDB
   hosts: cockroachdb
   gather_facts: yes
@@ -382,10 +405,6 @@
     cockroachdb_http_addr_port: 8080
     # cockroachdb_store:
     #   - /mnt/cockroach
-    cockroachdb_join: 
-      - "{{ hostvars[( groups[cluster_name] | intersect(groups['cockroachdb']) )[0]].public_ip }}"
-      - "{{ hostvars[( groups[cluster_name] | intersect(groups['cockroachdb']) )[1]].public_ip }}"
-      - "{{ hostvars[( groups[cluster_name] | intersect(groups['cockroachdb']) )[2]].public_ip }}"
     cockroachdb_secure_flag: --certs-dir=/var/lib/cockroach/certs
     cockroachdb_insecure_flag: --insecure
     cockroachdb_repo_url: https://binaries.cockroachdb.com
@@ -418,7 +437,7 @@
       shell: |
         wget -q {{ cockroachdb_repo_url }}/cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
       when: not _stat_result.stat.exists
-    
+
     - name: Install CockroachDB binary
       shell: |
         tar xvf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
@@ -600,15 +619,27 @@
         systemctl enable cockroachdb
         systemctl restart cockroachdb
 
+    - name: Find the first region host
+      set_fact:
+        init_host: >-
+          {{
+            groups
+            | dict2items
+            | selectattr('key', 'match', '^crdbregion_')
+            | map(attribute='value')
+            | flatten
+            | first
+          }}
+      run_once: yes
+
     - name: Init Cluster
       run_once: yes
       shell: |
         cockroach init \
-        {{ (cockroachdb_secure) | ternary(cockroachdb_secure_flag, cockroachdb_insecure_flag) }} \
-        --host={{ cockroachdb_join[0] }}:{{ cockroachdb_rpc_port }}
+          {{ (cockroachdb_secure) | ternary(cockroachdb_secure_flag, cockroachdb_insecure_flag) }} \
+          --host={{ hostvars[init_host].public_ip }}:{{ cockroachdb_rpc_port }}
       register: result
       failed_when: result.rc != 0 and 'cluster has already been initialized' not in result.stderr and 'unable to bootstrap due to internal error' not in result.stderr
-
 
 - name: DEPLOY COCKROACHDB-HAPROXY
   hosts: haproxy
@@ -616,8 +647,8 @@
   become: yes
   vars:
     haproxy_group: "{{ groups[cluster_name] | intersect(groups['cockroachdb']) }}"
-    haproxy_port: '26257'
-    haproxy_checkport: '8080'
+    haproxy_port: "26257"
+    haproxy_checkport: "8080"
     haproxy_serverprefix: cockroach
     # CRDB
     # cockroachdb_version: latest
@@ -702,14 +733,13 @@
       shell: |
         wget -q {{ cockroachdb_repo_url }}/cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
       when: not _stat_result.stat.exists
-    
+
     - name: Install CockroachDB binary
       shell: |
         tar xvf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
         mv cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}/cockroach /usr/local/bin/cockroach
         chmod 755 /usr/local/bin/cockroach
         rm -rf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}
-
 
 - name: SET CLUSTER SETTINGS FOR COCKROACHDB
   hosts: cockroachdb
@@ -727,7 +757,7 @@
           --host={{ cockroachdb_advertise_addr }} \
           --certs-dir=/var/lib/cockroach/certs \
           -e "SET CLUSTER SETTING cluster.organization = '{{ cockroachdb_cluster_organization }}';"
-    
+
     - name: CockroachDB - set enterprise.license
       run_once: yes
       shell: |
@@ -756,31 +786,7 @@
           -e "GRANT admin TO {{ item.name }};"
       loop: "{{ dbusers }}"
       when: item.is_admin
-    
-    - name: CockroachDB - Create External Connection for backups
-      run_once: yes
-      shell: |
-        cockroach sql \
-          --host={{ cockroachdb_advertise_addr }} \
-          --certs-dir=/var/lib/cockroach/certs \
-          -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS backup AS '{{ cloud_storage_url | replace('DEPLOYMENT_ID', deployment_id) }}';"
 
-    - name: CockroachDB - Setup Full Cluster Backup Schedule
-      run_once: yes
-      shell: |
-        cockroach sql \
-          --host={{ cockroachdb_advertise_addr }} \
-          --certs-dir=/var/lib/cockroach/certs \
-          -e "CREATE SCHEDULE IF NOT EXISTS main_backup 
-              FOR BACKUP INTO 'external://backup' 
-              WITH revision_history, incremental_location = 'external://backup' 
-              RECURRING '@hourly' 
-              FULL BACKUP '@daily' 
-              WITH SCHEDULE OPTIONS 
-                  on_previous_running = 'skip', 
-                  on_execution_failure = 'reschedule', 
-                  first_run = 'now';"
-    
 - name: GET DATA FROM COCKROACHDB CLUSTER
   hosts: localhost
   gather_facts: no

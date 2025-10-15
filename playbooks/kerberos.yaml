@@ -71,7 +71,6 @@
         backup: yes
         force: yes
 
-
 - name: INSTALL MIT KDC SERVER
   hosts: krb5_server
   gather_facts: yes
@@ -233,7 +232,6 @@
   tags:
     - app
 
-
 - name: SET CLUSTER SETTINGS FOR COCKROACHDB
   hosts: cockroachdb
   gather_facts: no
@@ -248,4 +246,3 @@
           -e "SET cluster setting server.host_based_authentication.configuration = 'host all app all cert-password
           host all all all gss include_realm=0';"
       when: cockroachdb_krb
-

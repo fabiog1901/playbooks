@@ -40,7 +40,7 @@
       shell: |
         wget -q {{ cockroachdb_repo_url }}/cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
       when: cockroachdb_version != "master" and cockroachdb_version != "custom" and not out.stat.exists
-    
+
     - name: Install CockroachDB binary
       shell: |
         tar xvf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
@@ -49,7 +49,7 @@
         mkdir /usr/local/lib/cockroach/
         mv cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}/lib/libgeos*.so /usr/local/lib/cockroach/
         rm -rf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}
-    
+
     - name: install MASTER binary
       when: cockroachdb_version == "master"
       shell: |
@@ -76,9 +76,9 @@
   tasks:
     - name: execute lscpu to find numa nodes count
       shell: |
-          lscpu | grep "NUMA node(s):" | cut -d":" -f2 | tr -d '[:space:]'
+        lscpu | grep "NUMA node(s):" | cut -d":" -f2 | tr -d '[:space:]'
       register: out
-    
+
     - name: Set fact ansible_numa_nodes
       set_fact:
         ansible_numa_nodes: "{{ out.stdout }}"
