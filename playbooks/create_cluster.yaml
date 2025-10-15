@@ -587,7 +587,7 @@
               --http-addr={{ cockroachdb_http_addr_ip }}:{{ cockroachdb_http_addr_port }} \
               {% for g in groups %}
               {% if g.startswith("crdbregion_") %}
-              {% for joinhost in groups[g][:3] %}
+              {% for joinhost in (groups[g] | sort)[:3] %}
               --join={{ hostvars[joinhost].public_ip }}:{{ cockroachdb_rpc_port }} \
               {% endfor%}
               {% endif %}
@@ -628,6 +628,7 @@
             | selectattr('key', 'match', '^crdbregion_')
             | map(attribute='value')
             | flatten
+            | sort
             | first
           }}
       run_once: yes
