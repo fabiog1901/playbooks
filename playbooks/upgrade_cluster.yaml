@@ -1,10 +1,66 @@
 ---
+- name: GATHER VMS
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: no
+  tags:
+    - infra
+    - cloud_instance
+  tasks:
+    - name: Ensure presence of instances
+      shell: |
+        cloud_instance gather \
+          -d {{ deployment_id }} 
+      register: instances 
+
+    - name: Build ansible inventory dynamically
+      add_host:
+        # id
+        name: "{{ item.public_ip }}"
+        id: "{{ item.id }}"
+
+        # locality
+        cloud: "{{ item.cloud }}"
+        region: "{{ item.region }}"
+        zone: "{{ item.zone }}"
+
+        # addresses
+        public_hostname: "{{ item.public_hostname }}"
+        public_ip: "{{ item.public_ip }}"
+        private_hostname: "{{ item.private_hostname }}"
+        private_ip: "{{ item.private_ip }}"
+
+        # tags
+        ansible_user: "{{ item.ansible_user }}"
+        ansible_host: "{{ item.public_ip }}"
+        groups: "{{ item.inventory_groups }}"
+        cluster_name: "{{ item.cluster_name }}"
+        group_name: "{{ item.group_name }}"
+        extra_vars: "{{ item.extra_vars }}"
+      loop: "{{ instances.stdout | from_json }}"
+
+    - debug:
+        msg: |
+          
+          {% for item in groups %}
+          {% if item in ['haproxy', 'cockroachdb'] %}
+          [{{item}}]
+          {% for entry in groups[item] %}
+          {{ hostvars[entry].cloud }}   {{ "{:18}".format(hostvars[entry].region) }} {{ hostvars[entry].public_ip }}
+          {% endfor %}
+
+          {% endif %}
+          {% endfor %}
+
+    - fail:
+
 - name: UPGRADE COCKROACHDB
   hosts: cockroachdb
   gather_facts: yes
   become: yes
   vars:
-    cockroachdb_version: v23.2.17
+    cockroachdb_version: v25.3.5
     iknowwhatiamdoing: no
     cockroachdb_autofinalize: yes
     cockroachdb_advertise_addr: "{{ public_ip }}"
