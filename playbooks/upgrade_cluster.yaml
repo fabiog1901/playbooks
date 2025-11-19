@@ -11,8 +11,8 @@
     - name: Ensure presence of instances
       shell: |
         cloud_instance gather \
-          -d {{ deployment_id }} 
-      register: instances 
+          -d {{ deployment_id }}
+      register: instances
 
     - name: Build ansible inventory dynamically
       add_host:
@@ -42,7 +42,7 @@
 
     - debug:
         msg: |
-          
+
           {% for item in groups %}
           {% if item in ['haproxy', 'cockroachdb'] %}
           [{{item}}]
@@ -53,14 +53,12 @@
           {% endif %}
           {% endfor %}
 
-    - fail:
-
 - name: UPGRADE COCKROACHDB
   hosts: cockroachdb
   gather_facts: yes
   become: yes
   vars:
-    cockroachdb_version: v25.3.5
+    cockroachdb_version: v25.2.8
     iknowwhatiamdoing: no
     cockroachdb_autofinalize: yes
     cockroachdb_advertise_addr: "{{ public_ip }}"
