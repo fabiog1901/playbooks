@@ -4,6 +4,8 @@
   connection: local
   gather_facts: no
   become: no
+  vars:
+    deployment_id: "" # passed with extra-vars
   tags:
     - infra
     - cloud_instance
@@ -40,9 +42,9 @@
         extra_vars: "{{ item.extra_vars }}"
       loop: "{{ instances.stdout | from_json }}"
 
-    - debug:
+    - name: Print a friendly server list
+      debug:
         msg: |
-
           {% for item in groups %}
           {% if item in ['haproxy', 'cockroachdb'] %}
           [{{item}}]
@@ -58,8 +60,7 @@
   gather_facts: yes
   become: yes
   vars:
-    cockroachdb_version: v25.2.8
-    iknowwhatiamdoing: no
+    cockroachdb_version: v25.4.0
     cockroachdb_autofinalize: yes
     cockroachdb_advertise_addr: "{{ public_ip }}"
     cockroachdb_repo_url: https://binaries.cockroachdb.com
