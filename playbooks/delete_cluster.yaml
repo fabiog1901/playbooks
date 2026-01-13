@@ -5,11 +5,7 @@
   gather_facts: no
   become: no
   tasks:
-    - name: Ensure presence of instances
+    - name: Remove all instances for the deployment_id
       shell: |
-        cloud_instance {{ deployment_id }} absent '[]' '{}'
+        cloud_instance delete -d {{ deployment_id }}
       register: instances
-
-    - name: list instances
-      debug:
-        var: instances.stdout | from_json

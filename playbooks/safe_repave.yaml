@@ -1,0 +1,170 @@
+---
+# - name: GATHER VMS
+#   hosts: localhost
+#   connection: local
+#   gather_facts: no
+#   become: no
+#   vars:
+#     deployment_id: "" # passed with extra-vars
+#   tasks:
+#     - name: Gather instance details
+#       shell: |
+#         cloud_instance gather \
+#           -d {{ deployment_id }}
+#       register: instances
+
+#     - name: Build ansible inventory dynamically
+#       add_host:
+#         # id
+#         name: "{{ item.public_ip }}"
+#         id: "{{ item.id }}"
+
+#         # locality
+#         cloud: "{{ item.cloud }}"
+#         region: "{{ item.region }}"
+#         zone: "{{ item.zone }}"
+
+#         # addresses
+#         public_hostname: "{{ item.public_hostname }}"
+#         public_ip: "{{ item.public_ip }}"
+#         private_hostname: "{{ item.private_hostname }}"
+#         private_ip: "{{ item.private_ip }}"
+
+#         # tags
+#         ansible_user: "{{ item.ansible_user }}"
+#         ansible_host: "{{ item.public_ip }}"
+#         groups: "{{ item.inventory_groups }}"
+#         cluster_name: "{{ item.cluster_name }}"
+#         group_name: "{{ item.group_name }}"
+#         extra_vars: "{{ item.extra_vars }}"
+#       loop: "{{ instances.stdout | from_json }}"
+
+#     - name: save cluster list of hosts
+#       copy:
+#         content: |
+#           {% for item in groups %}
+#           {% if item not in ['all', 'ungrouped'] %}
+#           [{{item}}]
+#           {% for entry in groups[item] %}
+#           {{ entry }} ansible_host={{ hostvars[entry].ansible_host }} cloud={{ hostvars[entry].cloud }} cluster_name={{ hostvars[entry].cluster_name }}  group_name={{ hostvars[entry].group_name }} id={{ hostvars[entry].id }} region={{ hostvars[entry].region }} zone={{ hostvars[entry].zone }} private_hostname={{ hostvars[entry].private_hostname }} private_ip={{ hostvars[entry].private_ip }} public_hostname={{ hostvars[entry].public_hostname }} public_ip={{ hostvars[entry].public_ip }} ansible_user={{ hostvars[entry].ansible_user }} extra_vars="{{ hostvars[entry].extra_vars }}"
+#           {% endfor %}
+
+#           {% endif %}
+#           {% endfor %}
+#         dest: "/tmp/repave.ini"
+
+#     - name: Print a friendly server list
+#       debug:
+#         msg: |
+#           {% for item in groups %}
+#           {% if item in ['haproxy', 'cockroachdb'] %}
+#           [{{item}}]
+#           {% for entry in groups[item] %}
+#           {{ hostvars[entry].cloud }}   {{ "{:18}".format(hostvars[entry].region) }} {{ hostvars[entry].public_ip }}
+#           {% endfor %}
+
+#           {% endif %}
+#           {% endfor %}
+
+- name: CHECK COCKROACHDB CLUSTER READINESS
+  hosts: cockroachdb
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: get current cockroachdb node status
+      shell: |
+        cockroach node status --certs-dir /var/lib/cockroach/certs/ --format json
+      register: out
+      run_once: yes
+
+    - name: save result to nodes
+      set_fact:
+        nodes: "{{ out.stdout | from_json }}"
+      delegate_to: localhost
+      delegate_facts: true
+      run_once: yes
+
+    - name: abort repave if any of the nodes is unhealthy
+      fail:
+      when: not (item.is_available and item.is_live)
+      loop: "{{ out.stdout | from_json }}"
+      run_once: yes
+
+    - name: fetch underreplicated ranges metric
+      shell: |
+        curl --insecure -s https://localhost:8080/_status/vars \
+          | grep "ranges_underreplicated{" \
+          | awk '{print $2}'
+      register: out
+    
+    - name: abort if there are underreplicated ranges
+      fail:
+      when: out | int > 0
+
+    - name: gather cpu util
+      shell: |
+        vmstat 1 2 | tail -1 | awk '{ print 100 - $15 }'
+      register: out
+      changed_when: no
+
+    - name: abort repave if cpu util for any of the nodes in the cluster is > 60%
+      fail:
+      when: "{{ out.stdout | int  >= 60 }}"
+
+- name: FIND LEAVES
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: no
+  tags:
+    - infra
+    - cloud_instance
+  tasks:
+    - name: Initialize map
+      set_fact:
+        locality_map: {}
+
+    - name: Group nodes by locality and collect addresses
+      set_fact:
+        locality_map: |
+          {{
+            locality_map | combine({
+              item.0: (item.1 | map(attribute='address') | map('regex_replace', ':[0-9]+$', '') | list)
+            })
+          }}
+      loop: "{{ nodes | groupby('locality') }}"
+
+    - name: Print the locality_map
+      debug:
+        var: locality_map
+
+- name: LAUNCH ANSIBLE-PLAYBOOK
+  hosts: localhost
+  gather_facts: no
+  become: no
+  tasks:
+    - name: create an inventory file for each locality leaf
+      copy:
+        content: |
+          {% for g in groups %}
+          {% if g not in ['all', 'ungrouped'] %}
+          [{{g}}]
+          {% for entry in groups[g] %}
+          {% if item.key == 'cloud=' + hostvars[entry].cloud + ',region=' + hostvars[entry].region + ',zone=' + hostvars[entry].zone %}
+          {{ entry }} ansible_host={{ hostvars[entry].ansible_host }} cloud={{ hostvars[entry].cloud }} cluster_name={{ hostvars[entry].cluster_name }}  group_name={{ hostvars[entry].group_name }} id={{ hostvars[entry].id }} region={{ hostvars[entry].region }} zone={{ hostvars[entry].zone }} private_hostname={{ hostvars[entry].private_hostname }} private_ip={{ hostvars[entry].private_ip }} public_hostname={{ hostvars[entry].public_hostname }} public_ip={{ hostvars[entry].public_ip }} ansible_user={{ hostvars[entry].ansible_user }} extra_vars="{{ hostvars[entry].extra_vars }}" 
+          {% endif %}
+          {% endfor %} 
+
+          {% endif %}
+          {% endfor %}
+        dest: "/tmp/{{ item.key | regex_replace('[^A-Za-z0-9]', '-') }}.ini"
+      loop: "{{ locality_map | dict2items }}"
+
+    # THIS IS AN ANSIBLE BAD PRACTICE
+    # but haven't worked around a solution yet
+    - name: Start ansible-playbook subprocess targeting a locality at the time
+      shell: |
+        ansible-playbook repave_loop.yaml -v \
+        -i /tmp/{{ item.key | regex_replace('[^A-Za-z0-9]', '-') }}.ini
+      loop: "{{ locality_map | dict2items }}"
+      changed_when: no

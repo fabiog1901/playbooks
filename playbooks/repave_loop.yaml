@@ -1,0 +1,68 @@
+---
+- name: REPAVE
+  hosts: cockroachdb
+  gather_facts: no
+  become: yes
+  tasks:
+    - name: repave operations
+      shell: |
+        logger -p kern.info "Hi dmesg, I'm using Ansible to repave, how cool is that?"
+        shutdown -r now
+
+- name: WAIT FOR SERVER TO BE READY
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: no
+  tasks:
+    # hard to tell when it has rebooted:
+    # so for now I'm just waiting for th eport to be unavailable and available again.
+    - name: Wait for SSH to go down
+      wait_for:
+        host: "{{ hostvars[item].public_ip }}"
+        port: 22
+        timeout: 180
+        sleep: 5
+        state: stopped
+      loop: "{{ groups['cockroachdb'] }}"
+
+
+    - name: Wait for SSH to come up
+      wait_for:
+        host: "{{ hostvars[item].public_ip }}"
+        port: 22
+        timeout: 180
+        sleep: 5
+        state: started
+      loop: "{{ groups['cockroachdb'] }}"
+
+- name: WAIT FOR CRDB TO BE READY
+  hosts: cockroachdb
+  gather_facts: no
+  become: yes
+  run_once: yes
+  tasks:
+    - name: Wait for CockroachDB to be back up
+      shell: |
+        # printing only the `is_available` and `is_live` columns
+        # and checking if any of the string == `false`
+        cockroach node status \
+          --certs-dir /var/lib/cockroach/certs/ \
+          --format tsv \
+          | tail -1 | awk '{ print $13, $14}' | grep "false"
+      register: out
+      async: 300           # max wait time (seconds)
+      poll: 5              # check every 5 seconds
+      retries: 30          # optional: limit the number of attempts
+      delay: 5             # optional: initial delay
+      until: out.rc == 1 and out.stderr == "" # means it couldn't find any "false" so all is healthy!
+      failed_when: no
+    
+  
+    - name: fail if any of the nodes is still unhealthy
+      fail:
+      when: out.rc == 0 or out.stderr != ""
+
+    - name: pause for a few seconds between localities repaves
+      pause:
+        seconds: 30
