@@ -1,4 +1,9 @@
 ---
+#
+# run this command:
+#
+# $ sudo ansible-playbook generate_ca_certs.yaml
+#
 - name: GENERATE CA CERTS
   hosts: localhost
   gather_facts: no
@@ -79,5 +84,5 @@
 
     - name: Recreate index and serial files
       shell: |
-        echo > {{ ca_dir }}/index.txt
+        touch {{ ca_dir }}/index.txt
         echo '01' > {{ ca_dir }}/serial.txt

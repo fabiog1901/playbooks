@@ -23,26 +23,26 @@
             "2":
               default: t3.large # m6i.large
               "4": c5.large
-              "8": m6i.large
+              "8": m8i.large
               "16": r5.large
             "4":
               default: t3.xlarge #m6i.xlarge
               "8": c5.xlarge
-              "16": m6i.xlarge
+              "16": m8i.xlarge
               "32": r5.xlarge
             "8":
-              default: m6i.2xlarge
+              default: m8i.2xlarge
               "16": c5.2xlarge
-              "32": m6i.2xlarge
+              "32": m8i.2xlarge
               "64": r5.2xlarge
             "16":
-              default: m6i.4xlarge
+              default: m7i.4xlarge
               "32": c5.4xlarge
-              "64": m6i.4xlarge
+              "64": m8i.4xlarge
               "128": r5.4xlarge
             "32":
-              default: m6i.8xlarge
-              "128": m6i.8xlarge
+              default: m8i.8xlarge
+              "128": m8i.8xlarge
               "256": r5.8xlarge
           azure:
             "2":
