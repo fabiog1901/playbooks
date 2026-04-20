@@ -1,0 +1,197 @@
+---
+- name: PROVISION VMS
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: no
+  vars:
+    deployment:
+      - cluster_name: fabio-rustfs
+        copies: 1
+        inventory_groups:
+          - rustfs
+        exact_count: 1
+        instance_type: t3.medium
+        # instance:
+        #   cpu: 4
+        volumes:
+          os:
+            size: 500
+            type: standard_ssd
+          data: []
+        tags:
+          Name: fabio-rustfs
+          owner: fabio@cockroachlabs.com
+        groups:
+          - user: ubuntu
+            public_ip: yes
+            public_key_id: workshop
+            cloud: aws
+            image: /canonical/ubuntu/server/24.04
+            region: us-east-1
+            vpc_id: vpc-039dd158f86366108
+            security_groups:
+              - sg-067d280fe7a21bc60
+            zone: a
+            subnet: subnet-0d933a012de53be58
+
+  tasks:
+    - name: Ensure presence of instances
+      shell: |
+        cloud_instance create -d fabio-rustfs \
+          --deployment '{{ deployment | to_json }}' \
+          --defaults {}
+      register: instances
+
+    - name: Wait for SSH to come up
+      wait_for:
+        host: "{{ item.public_ip }}"
+        port: 22
+        timeout: 180
+        sleep: 5
+        state: started
+      loop: "{{ instances.stdout | from_json }}"
+
+    - name: Build ansible inventory dynamically
+      add_host:
+        # id
+        name: "{{ item.public_ip }}"
+        id: "{{ item.id }}"
+
+        # locality
+        cloud: "{{ item.cloud }}"
+        region: "{{ item.region }}"
+        zone: "{{ item.zone }}"
+
+        # addresses
+        public_hostname: "{{ item.public_hostname }}"
+        public_ip: "{{ item.public_ip }}"
+        private_hostname: "{{ item.private_hostname }}"
+        private_ip: "{{ item.private_ip }}"
+
+        # tags
+        ansible_user: "{{ item.ansible_user }}"
+        ansible_host: "{{ item.public_ip }}"
+        groups: "{{ item.inventory_groups }}"
+        cluster_name: "{{ item.cluster_name }}"
+        group_name: "{{ item.group_name }}"
+        extra_vars: "{{ item.extra_vars }}"
+      loop: "{{ instances.stdout | from_json }}"
+
+    - name: save cluster list of hosts
+      copy:
+        content: |
+          {% for item in groups %}
+          {% if item not in ['all', 'ungrouped'] %}
+          [{{item}}]
+          {% for entry in groups[item] %}
+          {{ entry }} ansible_host={{ hostvars[entry].ansible_host }} cloud={{ hostvars[entry].cloud }} cluster_name={{ hostvars[entry].cluster_name }}  group_name={{ hostvars[entry].group_name }} id={{ hostvars[entry].id }} region={{ hostvars[entry].region }} zone={{ hostvars[entry].zone }} private_hostname={{ hostvars[entry].private_hostname }} private_ip={{ hostvars[entry].private_ip }} public_hostname={{ hostvars[entry].public_hostname }} public_ip={{ hostvars[entry].public_ip }} ansible_user={{ hostvars[entry].ansible_user }} extra_vars="{{ hostvars[entry].extra_vars }}" 
+          {% endfor %} 
+
+          {% endif %}
+          {% endfor %}
+        dest: "../inventories/rustfs.ini"
+
+- name: INSTALL RUSTFS
+  hosts: rustfs
+  gather_facts: yes
+  become: yes
+  tasks:
+    - name: create groups and directory
+      shell: |
+        id rustfs-user || useradd -s /bin/bash rustfs-user
+        mkdir -p /mnt/rustfs-data
+        mkdir -p /var/logs/rustfs
+        chmod 755 /mnt/rustfs-data
+        chmod 755 /var/logs/rustfs
+        chown rustfs-user:rustfs-user /mnt/rustfs-data
+        chown rustfs-user:rustfs-user /var/logs/rustfs
+
+    - name: Install unzip
+      shell: |
+        apt update
+        apt install -y unzip
+
+    - name: Install rustfs
+      shell: |
+        # Download address
+        wget https://dl.rustfs.com/artifacts/rustfs/release/rustfs-linux-x86_64-musl-latest.zip
+        unzip rustfs-linux-x86_64-musl-latest.zip
+        chmod +x rustfs
+        mv rustfs /usr/local/bin/
+
+    - name: set rustfs config file
+      copy:
+        content: |
+          RUSTFS_ACCESS_KEY=rustfsadmin
+          RUSTFS_SECRET_KEY=rustfsadmin
+          RUSTFS_VOLUMES="/mnt/rustfs-data"
+          RUSTFS_ADDRESS=":9000"
+          RUSTFS_CONSOLE_ENABLE=true
+          RUST_LOG=error
+          RUSTFS_OBS_LOG_DIRECTORY="/var/logs/rustfs/"
+        dest: /etc/default/rustfs
+
+    - name: Copy systemd template cockroachdb.service
+      copy:
+        content: |
+          [Unit]
+          Description=RustFS Object Storage Server
+          Documentation=https://rustfs.com/docs/
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=notify
+          NotifyAccess=main
+          User=root
+          Group=root
+
+          WorkingDirectory=/usr/local
+          EnvironmentFile=/etc/default/rustfs
+          ExecStart=/usr/local/bin/rustfs $RUSTFS_VOLUMES
+
+          LimitNOFILE=1048576
+          LimitNPROC=32768
+          TasksMax=infinity
+
+          Restart=always
+          RestartSec=10s
+
+          OOMScoreAdjust=-1000
+          SendSIGKILL=no
+
+          TimeoutStartSec=30s
+          TimeoutStopSec=30s
+
+          NoNewPrivileges=true
+
+          ProtectHome=true
+          PrivateTmp=true
+          PrivateDevices=true
+          ProtectClock=true
+          ProtectKernelTunables=true
+          ProtectKernelModules=true
+          ProtectControlGroups=true
+          RestrictSUIDSGID=true
+          RestrictRealtime=true
+
+          # service log configuration
+          StandardOutput=append:/var/logs/rustfs/rustfs.log
+          StandardError=append:/var/logs/rustfs/rustfs-err.log
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/rustfs.service
+        mode: 0644
+        owner: root
+        group: root
+        backup: yes
+        force: yes
+        
+    - name: Ensure cockroachdb service is restarted
+      shell: |
+        systemctl daemon-reload
+        systemctl enable rustfs
+        systemctl restart rustfs
+   
