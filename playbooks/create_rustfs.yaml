@@ -189,9 +189,11 @@
         backup: yes
         force: yes
         
-    - name: Ensure cockroachdb service is restarted
+    - name: Ensure rustfs service is restarted
       shell: |
         systemctl daemon-reload
         systemctl enable rustfs
         systemctl restart rustfs
    
+   # then issue locally a 
+   # rc alias set rem http://<host-ip>:9001/ rustfsadmin rustfsadmin

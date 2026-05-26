@@ -123,6 +123,7 @@
         public_ip: "{{ item.public_ip }}"
         private_hostname: "{{ item.private_hostname }}"
         private_ip: "{{ item.private_ip }}"
+        ip_address_type: "{{ item.ip_address_type }}"
 
         # tags
         ansible_user: "{{ item.ansible_user }}"
@@ -140,7 +141,7 @@
           {% if item not in ['all', 'ungrouped'] %}
           [{{item}}]
           {% for entry in groups[item] %}
-          {{ entry }} ansible_host={{ hostvars[entry].ansible_host }} cloud={{ hostvars[entry].cloud }} cluster_name={{ hostvars[entry].cluster_name }}  group_name={{ hostvars[entry].group_name }} id={{ hostvars[entry].id }} region={{ hostvars[entry].region }} zone={{ hostvars[entry].zone }} private_hostname={{ hostvars[entry].private_hostname }} private_ip={{ hostvars[entry].private_ip }} public_hostname={{ hostvars[entry].public_hostname }} public_ip={{ hostvars[entry].public_ip }} ansible_user={{ hostvars[entry].ansible_user }} extra_vars="{{ hostvars[entry].extra_vars }}" 
+          {{ entry }} ansible_host={{ hostvars[entry].ansible_host }} cloud={{ hostvars[entry].cloud }} cluster_name={{ hostvars[entry].cluster_name }}  group_name={{ hostvars[entry].group_name }} id={{ hostvars[entry].id }} region={{ hostvars[entry].region }} zone={{ hostvars[entry].zone }} private_hostname={{ hostvars[entry].private_hostname }} private_ip={{ hostvars[entry].private_ip }} public_hostname={{ hostvars[entry].public_hostname }} public_ip={{ hostvars[entry].public_ip }} ip_address_type={{ hostvars[entry].ip_address_type | default('ipv4') }} ansible_user={{ hostvars[entry].ansible_user }} extra_vars="{{ hostvars[entry].extra_vars }}"
           {% endfor %} 
 
           {% endif %}
@@ -565,33 +566,38 @@
     - name: Copy systemd template cockroachdb.service
       copy:
         content: |
+          {% set cockroachdb_is_ipv6 = ip_address_type | default('ipv4') == 'ipv6' -%}
+          {% set cockroachdb_listen_addr_rendered = cockroachdb_is_ipv6 | ternary('[::]', cockroachdb_listen_addr) -%}
+          {% set cockroachdb_http_addr_ip_rendered = cockroachdb_is_ipv6 | ternary('[::]', cockroachdb_http_addr_ip) -%}
+          {% set cockroachdb_advertise_addr_rendered = cockroachdb_is_ipv6 | ternary('[' + cockroachdb_advertise_addr + ']', cockroachdb_advertise_addr) -%}
           [Unit]
           Description=Cockroach Database cluster node
           Requires=network.target
           [Service]
           Type=notify
           WorkingDirectory=/var/lib/cockroach
-          {% for v in cockroachdb_env_vars %}
+          {% for v in cockroachdb_env_vars -%}
           Environment="{{ v }}"
-          {% endfor %}
+          {% endfor -%}
           ExecStart=/usr/local/bin/cockroach start \
               {{ (cockroachdb_secure) | ternary(cockroachdb_secure_flag, cockroachdb_insecure_flag) }} \
-              {% for store in cockroachdb_store %}
+              {% for store in cockroachdb_store -%}
               --store={{ store }} \
-              {% endfor %}
-              --listen-addr={{ cockroachdb_listen_addr }}:{{ cockroachdb_rpc_port }} \
-              --advertise-addr={{ cockroachdb_advertise_addr }}:{{ cockroachdb_rpc_port }} \
+              {% endfor -%}
+              --listen-addr={{ cockroachdb_listen_addr_rendered }}:{{ cockroachdb_rpc_port }} \
+              --advertise-addr={{ cockroachdb_advertise_addr_rendered }}:{{ cockroachdb_rpc_port }} \
               --sql-addr=:{{ cockroachdb_sql_port }} \
               --cache={{ cockroachdb_cache }} \
               --max-sql-memory={{ cockroachdb_max_sql_memory }} \
-              --http-addr={{ cockroachdb_http_addr_ip }}:{{ cockroachdb_http_addr_port }} \
-              {% for g in groups %}
-              {% if g.startswith("crdbregion_") %}
-              {% for joinhost in (groups[g] | sort)[:3] %}
-              --join={{ hostvars[joinhost].public_ip }}:{{ cockroachdb_rpc_port }} \
-              {% endfor%}
-              {% endif %}
-              {% endfor %}
+              --http-addr={{ cockroachdb_http_addr_ip_rendered }}:{{ cockroachdb_http_addr_port }} \
+              {% for g in groups -%}
+              {% if g.startswith("crdbregion_") -%}
+              {% for joinhost in (groups[g] | sort)[:3] -%}
+              {% set join_addr = (hostvars[joinhost].ip_address_type | default('ipv4') == 'ipv6') | ternary('[' + hostvars[joinhost].public_ip + ']', hostvars[joinhost].public_ip) -%}
+              --join={{ join_addr }}:{{ cockroachdb_rpc_port }} \
+              {% endfor -%}
+              {% endif -%}
+              {% endfor -%}
               --locality={{ cockroachdb_locality }} \
               --attrs={{ cockroachdb_attrs }} \
               --max-offset={{ cockroachdb_max_offset }}
@@ -633,12 +639,21 @@
           }}
       run_once: yes
 
+    - name: Format init host address
+      set_fact:
+        init_host_addr: >-
+          {{
+            (hostvars[init_host].ip_address_type | default('ipv4') == 'ipv6')
+            | ternary('[' + hostvars[init_host].public_ip + ']', hostvars[init_host].public_ip)
+          }}
+      run_once: yes
+
     - name: Init Cluster
       run_once: yes
       shell: |
         cockroach init \
           {{ (cockroachdb_secure) | ternary(cockroachdb_secure_flag, cockroachdb_insecure_flag) }} \
-          --host={{ hostvars[init_host].public_ip }}:{{ cockroachdb_rpc_port }}
+          --host={{ init_host_addr }}:{{ cockroachdb_rpc_port }}
       register: result
       failed_when: result.rc != 0 and 'cluster has already been initialized' not in result.stderr and 'unable to bootstrap due to internal error' not in result.stderr
 

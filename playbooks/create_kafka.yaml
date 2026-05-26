@@ -1,0 +1,224 @@
+---
+- name: PROVISION VMS
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: no
+  vars:
+    deployment:
+      - cluster_name: fabio-kafka
+        copies: 1
+        inventory_groups:
+          - kafka
+        exact_count: 1
+        instance_type: m7i.2xlarge
+        # instance:
+        #   cpu: 4
+        volumes:
+          os:
+            size: 500
+            type: standard_ssd
+          data: []
+        tags:
+          Name: fabio-kafka
+          owner: fabio@cockroachlabs.com
+        groups:
+          - user: ubuntu
+            public_ip: yes
+            public_key_id: workshop
+            cloud: aws
+            image: /canonical/ubuntu/server/24.04
+            region: ca-central-1
+            vpc_id: vpc-0289741dc46c80da8
+            security_groups:
+              - sg-0e3631bbd91d95940
+            zone: a
+            subnet: subnet-02ed0abd3c499dca9
+
+  tasks:
+    - name: Ensure presence of instances
+      shell: |
+        cloud_instance create -d fabio-kafka \
+          --deployment '{{ deployment | to_json }}' \
+          --defaults {}
+      register: instances
+
+    - name: Wait for SSH to come up
+      wait_for:
+        host: "{{ item.public_ip }}"
+        port: 22
+        timeout: 180
+        sleep: 5
+        state: started
+      loop: "{{ instances.stdout | from_json }}"
+
+    - name: Build ansible inventory dynamically
+      add_host:
+        # id
+        name: "{{ item.public_ip }}"
+        id: "{{ item.id }}"
+
+        # locality
+        cloud: "{{ item.cloud }}"
+        region: "{{ item.region }}"
+        zone: "{{ item.zone }}"
+
+        # addresses
+        public_hostname: "{{ item.public_hostname }}"
+        public_ip: "{{ item.public_ip }}"
+        private_hostname: "{{ item.private_hostname }}"
+        private_ip: "{{ item.private_ip }}"
+
+        # tags
+        ansible_user: "{{ item.ansible_user }}"
+        ansible_host: "{{ item.public_ip }}"
+        groups: "{{ item.inventory_groups }}"
+        cluster_name: "{{ item.cluster_name }}"
+        group_name: "{{ item.group_name }}"
+        extra_vars: "{{ item.extra_vars }}"
+      loop: "{{ instances.stdout | from_json }}"
+
+    - name: save cluster list of hosts
+      copy:
+        content: |
+          {% for item in groups %}
+          {% if item not in ['all', 'ungrouped'] %}
+          [{{item}}]
+          {% for entry in groups[item] %}
+          {{ entry }} ansible_host={{ hostvars[entry].ansible_host }} cloud={{ hostvars[entry].cloud }} cluster_name={{ hostvars[entry].cluster_name }}  group_name={{ hostvars[entry].group_name }} id={{ hostvars[entry].id }} region={{ hostvars[entry].region }} zone={{ hostvars[entry].zone }} private_hostname={{ hostvars[entry].private_hostname }} private_ip={{ hostvars[entry].private_ip }} public_hostname={{ hostvars[entry].public_hostname }} public_ip={{ hostvars[entry].public_ip }} ansible_user={{ hostvars[entry].ansible_user }} extra_vars="{{ hostvars[entry].extra_vars }}" 
+          {% endfor %} 
+
+          {% endif %}
+          {% endfor %}
+        dest: "../inventories/kafka.ini"
+
+- name: DEPLOY KAFKA
+  hosts: kafka
+  gather_facts: yes
+  become: yes
+  tasks:
+    # - name: create groups and directory
+    #   shell: |
+    #     id kafka-user || useradd -s /bin/bash kafka-user
+    #     mkdir -p /mnt/kafka-data
+    #     mkdir -p /var/logs/kafka
+    #     chmod 755 /mnt/kafka-data
+    #     chmod 755 /var/logs/kafka
+    #     chown kafka-user:kafka-user /mnt/kafka-data
+    #     chown kafka-user:kafka-user /var/logs/kafka
+
+
+    - name: Install Java SDK
+      shell: |
+        apt update
+        apt install -y default-jdk
+
+    - name: Check that the Kafka tarball exists locally
+      stat:
+        path: kafka_2.13-4.2.0.tgz
+      register: _stat_result
+
+    - name: Download Kafka binary
+      shell: |
+        wget https://dlcdn.apache.org/kafka/4.2.0/kafka_2.13-4.2.0.tgz
+        tar -xzf kafka_2.13-4.2.0.tgz
+        mv kafka_2.13-4.2.0 kafka
+      when: not _stat_result.stat.exists  
+
+    - name: Format kafka storage directories
+      shell: |
+        cd kafka
+        KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
+        bin/kafka-storage.sh format \
+          --standalone \
+          -t $KAFKA_CLUSTER_ID \
+          -c config/server.properties \
+          --ignore-formatted 
+
+    # - name: set kafka config file
+    #   copy:
+    #     content: |
+    #       kafka_ACCESS_KEY=kafkaadmin
+    #       kafka_SECRET_KEY=kafkaadmin
+    #       kafka_VOLUMES="/mnt/kafka-data"
+    #       kafka_ADDRESS=":9000"
+    #       kafka_CONSOLE_ENABLE=true
+    #       RUST_LOG=error
+    #       kafka_OBS_LOG_DIRECTORY="/var/logs/kafka/"
+    #     dest: /etc/default/kafka
+
+    - name: Copy systemd template kafka.service
+      copy:
+        content: |
+          [Service]
+          Type=simple
+          User=root
+          Group=root
+          WorkingDirectory=/home/ubuntu/kafka
+          ExecStart=/home/ubuntu/kafka/bin/kafka-server-start.sh /home/ubuntu/kafka/config/server.properties
+          ExecStop=/home/ubuntu/kafka/bin/kafka-server-stop.sh
+          Restart=on-failure
+          RestartSec=10
+          LimitNOFILE=1048576
+        dest: /etc/systemd/system/kafka.service
+        mode: 0644
+        owner: root
+        group: root
+        backup: yes
+        force: yes
+        
+    - name: Set log retention to 8 hours
+      ansible.builtin.lineinfile:
+        path: kafka/config/server.properties
+        regexp: '^log\.retention\.hours='
+        line: 'log.retention.hours=8'
+        backrefs: no
+
+    - name: Comment out advertised.listeners
+      ansible.builtin.lineinfile:
+        path: kafka/config/server.properties
+        regexp: '^(advertised\.listeners=.*)'
+        line: '# \1'
+        backrefs: yes
+
+    - name: Ensure kafka service is restarted
+      shell: |
+        systemctl daemon-reload
+        systemctl enable kafka
+        systemctl restart kafka
+   
+
+# For a “discard as fast as possible” test broker, use tmpfs/RAM disk instead:
+
+# sudo mkdir -p /mnt/kafka-ram
+# sudo mount -t tmpfs -o size=8G tmpfs /mnt/kafka-ram
+
+# Then in server.properties:
+
+# log.dirs=/mnt/kafka-ram/kafka-logs
+
+# num.partitions=12
+# default.replication.factor=1
+# min.insync.replicas=1
+
+# log.retention.hours=1
+# log.retention.bytes=1073741824
+# log.segment.bytes=134217728
+
+# num.network.threads=8
+# num.io.threads=16
+# socket.send.buffer.bytes=1048576
+# socket.receive.buffer.bytes=1048576
+# queued.max.requests=10000
+
+# For the topic, keep replication and durability minimal:
+
+# kafka-topics.sh \
+#   --bootstrap-server localhost:9092 \
+#   --create \
+#   --topic producer-speed-test \
+#   --partitions 12 \
+#   --replication-factor 1 \
+#   --config retention.ms=60000 \
+#   --config retention.bytes=1073741824 \
+#   --config segment.bytes=134217728
