@@ -94,3 +94,18 @@ File `deployments/sample.yaml` contains the details of the deployment
 ```bash
 ansible-playbook playbooks/create_cluster.yaml  -e @deployments/sample.yaml
 ```
+
+## IPv6 deplyment
+
+Create 2 tunnels, for HTTP and SQL ports, where:
+
+- `8080` is the local port
+- `[2600:1f11:70f:b300:980b:a9c5:117b:a40e]:8080` is the LB server target host:port
+- `ubuntu@35.183.19.250` is the jumpbox server
+
+```bash
+$ ssh -N \
+  -L 8080:[2600:1f11:70f:b300:980b:a9c5:117b:a40e]:8080 \
+  -L 26257:[2600:1f11:70f:b300:980b:a9c5:117b:a40e]:26257 \
+  ubuntu@35.183.19.250
+```
