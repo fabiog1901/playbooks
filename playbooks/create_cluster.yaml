@@ -431,22 +431,22 @@
 
     - name: Check that the CockroachDB tarball exists locally
       stat:
-        path: cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
+        path: cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}.tgz
       register: _stat_result
 
     - name: Download CockroachDB binary
       shell: |
-        wget -q {{ cockroachdb_repo_url }}/cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
+        wget -q {{ cockroachdb_repo_url }}/cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}.tgz
       when: not _stat_result.stat.exists
 
     - name: Install CockroachDB binary
       shell: |
-        tar xvf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
-        mv cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}/cockroach /usr/local/bin/cockroach
+        tar xvf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}.tgz
+        mv cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}/cockroach /usr/local/bin/cockroach
         chmod 755 /usr/local/bin/cockroach
         mkdir /usr/local/lib/cockroach/
-        mv cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}/lib/libgeos*.so /usr/local/lib/cockroach/
-        rm -rf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}
+        mv cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}/lib/libgeos*.so /usr/local/lib/cockroach/
+        rm -rf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}
 
     - name: Add the user cockroach
       shell: |
@@ -743,20 +743,20 @@
 
     - name: Check that the CockroachDB tarball exists locally
       stat:
-        path: cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
+        path: cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}.tgz
       register: _stat_result
 
     - name: Download CockroachDB binary
       shell: |
-        wget -q {{ cockroachdb_repo_url }}/cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
+        wget -q {{ cockroachdb_repo_url }}/cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}.tgz
       when: not _stat_result.stat.exists
 
     - name: Install CockroachDB binary
       shell: |
-        tar xvf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}.tgz
-        mv cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}/cockroach /usr/local/bin/cockroach
+        tar xvf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}.tgz
+        mv cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}/cockroach /usr/local/bin/cockroach
         chmod 755 /usr/local/bin/cockroach
-        rm -rf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_architecture] }}
+        rm -rf cockroach-{{ cockroachdb_version }}.linux-{{ bin_arch[ansible_facts["architecture"]] }}
 
 - name: SET CLUSTER SETTINGS FOR COCKROACHDB
   hosts: cockroachdb
