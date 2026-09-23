@@ -599,7 +599,10 @@
               {% endif -%}
               {% endfor -%}
               --locality={{ cockroachdb_locality }} \
+              {% if cockroachdb_attrs | default('', true) | trim -%}
               --attrs={{ cockroachdb_attrs }} \
+              {% endif -%}
+              --cluster-name={{ deployment_id }} \
               --max-offset={{ cockroachdb_max_offset }}
           TimeoutStopSec=300
           LimitNOFILE=65000
@@ -653,7 +656,8 @@
       shell: |
         cockroach init \
           {{ (cockroachdb_secure) | ternary(cockroachdb_secure_flag, cockroachdb_insecure_flag) }} \
-          --host={{ init_host_addr }}:{{ cockroachdb_rpc_port }}
+          --host={{ init_host_addr }}:{{ cockroachdb_rpc_port }} \
+          --cluster-name {{ deployment_id }}
       register: result
       failed_when: result.rc != 0 and 'cluster has already been initialized' not in result.stderr and 'unable to bootstrap due to internal error' not in result.stderr
 
